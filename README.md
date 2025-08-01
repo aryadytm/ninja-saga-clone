@@ -11,14 +11,13 @@ A turn-based ninja duel browser game inspired by classic RPGs and games like Nin
 
 ## 🎮 Features
 
-* ✅ Fully contained in one HTML file (zero dependencies)
-* 🌀 Dynamic SVG animations for combat effects
-* 🧠 Deterministic AI with multiple difficulty levels (`easy`, `medium`, `hard`)
+* 🧠 **VERY SMART AI CPU!**
 * 🔥 Elemental affinities: Fire, Water, Wind, Earth, Lightning
 * ⚡ Status effects: Burn, Soaked, Exposed, Black Flame, Chakra Seal, Bound, Regeneration, Shocked
 * 🎯 Ability types: Basic Attacks, Specials, Counters, Healing
 * 📜 Battle log and UI panels (combat info, abilities, turn management)
 * 📱 Responsive layout for desktop & mobile
+* ✅ Fully contained in one HTML file (zero dependencies)
 
 ---
 
