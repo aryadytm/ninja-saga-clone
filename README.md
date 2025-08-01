@@ -71,12 +71,12 @@ A turn-based ninja duel browser game inspired by classic RPGs and games like Nin
 ### 1. Clone or download the HTML file:
 
 ```bash
-git clone https://github.com/aryadytm/ninja-saga-clone.git
+git clone https://github.com/aryadytm/shinobi-saga.git
 ```
 
 ### 2. Open in browser
 
-Double-click or drag `ninja-saga-clone.html` into your browser. No build process or hosting required.
+Double-click or drag `shinobi-saga.html` into your browser. No build process or hosting required.
 
 ---
 
