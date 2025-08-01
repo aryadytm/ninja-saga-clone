@@ -22,6 +22,50 @@ A turn-based ninja duel browser game inspired by classic RPGs and games like Nin
 
 ---
 
+## 🕹️ Gameplay Overview
+
+* You and the CPU take turns
+* Each turn: choose a skill or end turn
+* Manage Chakra and cooldowns
+* Exploit elemental counters & status effects
+
+---
+
+## 🔥 Abilities
+
+| Name                    | Type    | Cost | CD | Effects                                                                |
+| ----------------------- | ------- | ---- | -- | ---------------------------------------------------------------------- |
+| **Basic Attack**        | Attack  | 0    | 0  | Standard strike, no cost                                               |
+| **Fireball Jutsu**      | Basic   | 20   | 2  | Damage + applies **Burn (2 turns)**                                    |
+| **Water Wave**          | Basic   | 20   | 2  | Damage + **Soaked (3 turns)**; removes **Burn**, refunds 8 Chakra      |
+| **Wind Slash**          | Basic   | 18   | 2  | Damage + **Exposed (5 turns)**                                         |
+| **Earth Binding**       | Basic   | 22   | 4  | Damage + **Bound (1 turn)** + **Exposed (1 turn)**                     |
+| **Thunderstorm**        | Basic   | 22   | 3  | Damage + **Shocked (2 turns)**; if **Soaked**, also **Bound (1 turn)** |
+| **Healing Jutsu**       | Special | 25   | 8  | Instantly restores 50 HP                                               |
+| **Regeneration**        | Special | 28   | 8  | Gain **Regeneration (4 turns)** = +15 HP/turn                          |
+| **Sharingan Amaterasu** | Special | 40   | 5  | High damage + **Black Flame (3 turns)**                                |
+| **Byakugan Seals**      | Special | 30   | 4  | Damage + **Chakra Seal (2 turns)**, drains 20 Chakra (recover 50%)     |
+| **Revenge Counter**     | Special | 30   | 10 | Reflects opponent's last move (double potency), 50% crit chance        |
+
+> CD = Cooldown (in turns)
+
+---
+
+## 🧬 Status Effects
+
+| Status           | Effect                              |
+| ---------------- | ----------------------------------- |
+| **Burn**         | Damage over time (DoT)              |
+| **Black Flame**  | Stronger DoT, not reduced by Soaked |
+| **Soaked**       | Takes +50% Wind, -30% Fire damage   |
+| **Exposed**      | Takes +30% more damage              |
+| **Bound**        | Skips next turn                     |
+| **Shocked**      | Deals half damage next turn         |
+| **Chakra Seal**  | Can't use jutsu or regen chakra     |
+| **Regeneration** | Heal 15 HP per turn                 |
+
+---
+
 ## 🚀 Getting Started
 
 ### 1. Clone or download the HTML file:
