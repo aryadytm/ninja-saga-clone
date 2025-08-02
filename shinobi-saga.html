@@ -940,7 +940,7 @@
             desc: "Quick melee strike. No chakra cost.",
             cost: 0,
             cooldown: 0,
-            base: 22,
+            base: 20,
             critChance: 0.1,
             tags: ["melee"],
             icon: buildIconBasic,
@@ -957,7 +957,7 @@
             type: "Basic",
             desc: "Hurls a flaming sphere dealing damage and applying Burn (2 turns). Soaked reduces Fire damage. Water Wave removes Burn.",
             cost: 20,
-            cooldown: 2,
+            cooldown: 3,
             base: 30,
             critChance: 0.1,
             tags: ["fire", "jutsu"],
@@ -977,7 +977,7 @@
             type: "Basic",
             desc: "Sends a surging wave. Deals solid damage, applies Soaked (3 turns: +50% Wind dmg, -30% Fire dmg) and removes Burn. If Burn is extinguished, refund 8 Chakra.",
             cost: 20,
-            cooldown: 2,
+            cooldown: 3,
             base: 30,
             critChance: 0.1,
             tags: ["water", "jutsu"],
@@ -1006,9 +1006,9 @@
             key: "wind",
             name: "Wind Slash",
             type: "Basic",
-            desc: "Cuts with compressed air. Applies Exposed (2 turns: takes +30% damage).",
+            desc: "Cuts with compressed air. Applies Exposed (5 turns: takes +30% damage).",
             cost: 18,
-            cooldown: 2,
+            cooldown: 3,
             base: 24,
             critChance: 0.3,
             tags: ["wind", "jutsu"],
@@ -1025,7 +1025,7 @@
             key: "amaterasu",
             name: "Sharingan Amaterasu",
             type: "Special",
-            desc: "Black flames from the Sharingan. Heavy damage and applies Black Flame (3 turns, high DoT). Not reduced by Soaked.",
+            desc: "Black flames from the Mangekyou Sharingan. Heavy damage and applies Black Flame (3 turns, high DoT). Not reduced by Soaked.",
             cost: 40,
             cooldown: 5,
             base: 36,
@@ -1198,6 +1198,24 @@
               }
               if (key === "amaterasu") ctx2.ignoreSoakedFireReduction = true
               return src.onImpact(caster, target, ctx2) || {}
+            },
+          },
+          /* --- NEW pseudo-ability for the AI -------------------------- */
+          skip: {
+            key: "skip",
+            name: "Chakra Focus",
+            type: "Utility",
+            desc: "Skip the turn to focus and double chakra regeneration next turn.",
+            cost: 0,
+            cooldown: 0,
+            base: 0,
+            critChance: 0,
+            tags: ["skip"],
+            icon: () => "",
+            animation: animateSelf, // quick self-pose
+            onImpact: (caster) => {
+              caster.lastTurnSkipped = true // flag for double regen
+              return {}
             },
           },
         }
@@ -1424,6 +1442,7 @@
         }
 
         function canUse(entity, key) {
+          if (key === "skip") return { ok: true } // always allowed for AI
           const a = Abilities[key]
           if (!a) return { ok: false, reason: "Unknown" }
           if (entity.cooldowns[key] > 0) return { ok: false, reason: `Cooldown ${entity.cooldowns[key]} turn(s)` }
@@ -2125,6 +2144,12 @@
 
         // expected value of an ability using a live simulation step
         function evaluateAbility(key, caster, target) {
+          /* --- NEW: special handling for Skip ------------------------ */
+          if (key === "skip") {
+            if (caster.statuses.chakraSeal) return -20 // no regen while sealed
+            const missing = caster.maxCh - caster.ch // value grows when low on chakra
+            return 0.4 * missing // up to ~16 pts when empty
+          }
           if (!Abilities[key]) return -Infinity
 
           /* ----------  Heuristic helpers  ---------- */
@@ -2429,6 +2454,11 @@
 
         // Accurate application using the authentic onImpact logic
         function simApplyAbility(caster, target, key) {
+          /* Skip: mark flag, spend nothing */
+          if (key === "skip") {
+            caster.lastTurnSkipped = true
+            return
+          }
           const ab = Abilities[key]
           if (!ab) return
           withSimulation(() => {
@@ -2478,28 +2508,37 @@
         // Order moves using the same heuristics we added for Medium AI
         function orderedLegalMoves(caster, opponent) {
           const DEFENSIVE = new Set(["byakugan", "earth", "thunder", "healing", "regeneration"])
-          return abilityOrder
-            .filter((k) => canUse(caster, k).ok)
-            .sort((a, b) => {
-              const sa = moveScore(a)
-              const sb = moveScore(b)
-              return sb - sa
-            })
+          /* collect legal ability moves */
+          const moves = abilityOrder.filter((k) => canUse(caster, k).ok)
+          /* always add the option to Skip */
+          if (canUse(caster, "skip").ok) moves.push("skip")
+
+          return moves.sort((a, b) => {
+            const sa = moveScore(a)
+            const sb = moveScore(b)
+            return sb - sa
+          })
 
           // --- local helper --------------------------------------------
           function moveScore(key) {
-            // Immediate-lethal check
-            const c0 = cloneEntityLite(caster)
-            const o0 = cloneEntityLite(opponent)
-            simApplyAbility(c0, o0, key)
-            if (o0.hp <= 0) return 99999
+            /* Immediate-lethal check (not for skip) */
+            if (key !== "skip") {
+              const c0 = cloneEntityLite(caster)
+              const o0 = cloneEntityLite(opponent)
+              simApplyAbility(c0, o0, key)
+              if (o0.hp <= 0) return 99999
+            }
 
             let score = evaluateAbility(key, caster, opponent)
 
-            // Threat prevention: will reply one-shot us?
-            const threat = estimateOpponentBestDamage(c0, o0)
-            if (threat >= c0.hp) score += DEFENSIVE.has(key) ? 30 : -40
-
+            // Threat prevention
+            if (key !== "skip") {
+              const c0 = cloneEntityLite(caster)
+              const o0 = cloneEntityLite(opponent)
+              simApplyAbility(c0, o0, key)
+              const threat = estimateOpponentBestDamage(c0, o0)
+              if (threat >= c0.hp) score += DEFENSIVE.has(key) ? 30 : -40
+            }
             return score
           }
         }
