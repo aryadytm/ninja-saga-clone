@@ -957,7 +957,7 @@
             type: "Basic",
             desc: "Hurls a flaming sphere dealing damage and applying Burn (2 turns). Soaked reduces Fire damage. Water Wave removes Burn.",
             cost: 20,
-            cooldown: 3,
+            cooldown: 2,
             base: 30,
             critChance: 0.1,
             tags: ["fire", "jutsu"],
@@ -1028,7 +1028,7 @@
             desc: "Black flames from the Mangekyou Sharingan. Heavy damage and applies Black Flame (3 turns, high DoT). Not reduced by Soaked.",
             cost: 40,
             cooldown: 5,
-            base: 36,
+            base: 40,
             critChance: 0.1,
             tags: ["amaterasu", "black", "jutsu"],
             icon: buildIconAmaterasu,
@@ -1119,7 +1119,7 @@
             critChance: 0.2,
             tags: ["lightning", "jutsu"],
             icon: buildIconThunder,
-            animation: animateStrike,
+            animation: animateThunder,
             onImpact: (caster, target, ctx) => {
               let dmg = computeDamage(ctx.base, caster, target, ctx)
               const soaked = !!target.statuses.soaked
@@ -1140,20 +1140,27 @@
             key: "earth",
             name: "Earth Binding",
             type: "Basic",
-            desc: "18 damage and Bind the enemy (skip their next turn). Also applies Exposed for 1 turn.",
+            desc: "20 damage and Bind the enemy (skip their next turn). Also applies Exposed for 1 turn and drains 8 Chakra.",
             cost: 22,
             cooldown: 4,
-            base: 18,
+            base: 20,
             critChance: 0.1,
             tags: ["earth", "jutsu"],
             icon: buildIconEarth,
-            animation: animateStrike,
+            animation: animateBind, // was animateStrike
             onImpact: (caster, target, ctx) => {
               const dmg = computeDamage(ctx.base, caster, target, ctx)
               applyDamage(target, dmg, { crit: ctx.crit })
               applyStatus(target, "bound", { duration: 1 })
               applyStatus(target, "exposed", { duration: 1 })
-              return { dmg, applied: ["Bound", "Exposed"] }
+              // Drain 8 Chakra from the target
+              const drained = Math.min(8, target.ch)
+              if (drained > 0) {
+                target.ch -= drained
+                pushFloat(target, `-${drained} Chakra`, "neg")
+                log(`${target.name} lost <b>${drained}</b> Chakra.`, "neg")
+              }
+              return { dmg, applied: ["Bound", "Exposed"], drained }
             },
           },
           counter: {
@@ -1504,7 +1511,7 @@
           line.setAttribute("x2", from.x)
           line.setAttribute("y2", from.y)
           line.setAttribute("stroke", "#ffd28a")
-          line.setAttribute("stroke-width", "3")
+          line.setAttribute("stroke-width", "5") /* was 3 → thicker blade */
           line.setAttribute("stroke-linecap", "round")
           fxSVG.appendChild(line)
 
@@ -1530,7 +1537,7 @@
           const burst = document.createElementNS(SVG_NS, "circle")
           burst.setAttribute("cx", to.x)
           burst.setAttribute("cy", to.y)
-          burst.setAttribute("r", "4")
+          burst.setAttribute("r", "6") /* was 4 → larger spark */
           burst.setAttribute("fill", "#ffcc88")
           burst.setAttribute("opacity", "1")
           fxSVG.appendChild(burst)
@@ -1545,7 +1552,7 @@
           await new Promise((res) => {
             function step2(t) {
               const k = clamp((t - t1) / dur2, 0, 1)
-              burst.setAttribute("r", String(4 + 16 * k))
+              burst.setAttribute("r", String(6 + 26 * k)) /* was 4 + 16*k → 6 + 26*k */
               burst.setAttribute("opacity", String(1 - k))
               if (k < 1) requestAnimationFrame(step2)
               else res()
@@ -1796,8 +1803,8 @@
           const origEyesHTML = casterEyes.innerHTML
           // Red sharingan
           casterEyes.innerHTML = `
-      <circle cx="101" cy="73.5" r="3.5" fill="#ad1515" stroke="#2b0000" stroke-width="1"/>
-      <circle cx="129" cy="73.5" r="3.5" fill="#ad1515" stroke="#2b0000" stroke-width="1"/>
+      <circle cx="101" cy="13.5" r="3.5" fill="#ad1515" stroke="#2b0000" stroke-width="1"/>
+      <circle cx="129" cy="13.5" r="3.5" fill="#ad1515" stroke="#2b0000" stroke-width="1"/>
     `
 
           const to = getCharCenter(target.side)
@@ -1806,10 +1813,10 @@
           g.setAttribute("opacity", "0.1") // will ramp up
           const flame1 = document.createElementNS(SVG_NS, "path")
           flame1.setAttribute("fill", "#111")
-          flame1.setAttribute("d", flamePath(to.x, to.y - 4, 16))
+          flame1.setAttribute("d", flamePath(to.x, to.y - 10, 32)) /* size ×2 (16→32) */
           const flame2 = document.createElementNS(SVG_NS, "path")
           flame2.setAttribute("fill", "#222")
-          flame2.setAttribute("d", flamePath(to.x + 4, to.y - 2, 12))
+          flame2.setAttribute("d", flamePath(to.x + 4, to.y - 8, 24)) /* 12→24 */
           g.appendChild(flame1)
           g.appendChild(flame2)
           fxSVG.appendChild(g)
@@ -2568,6 +2575,28 @@
         }
 
         function search(state, depth, alpha, beta) {
+          /* ----------  Bound (skip-turn) handling  ---------- */
+          const actor = state.turn === "ai" ? state.ai : state.pl
+          if (actor.statuses && actor.statuses.bound) {
+            /* Consume the skip: decrement duration, mark double-regen flag */
+            actor.statuses.bound.duration--
+            if (actor.statuses.bound.duration <= 0) delete actor.statuses.bound
+            actor.lastTurnSkipped = true
+
+            /* Opponent immediately starts their turn */
+            const opp = state.turn === "ai" ? state.pl : state.ai
+            simStartOfTurn(opp) // DoTs / regen / cds for the new actor
+            state.turn = state.turn === "ai" ? "pl" : "ai"
+
+            /* Check lethal dots that may have fired just now */
+            if (state.pl.hp <= 0) return 99999
+            if (state.ai.hp <= 0) return -99999
+
+            /* Re-enter search one ply deeper */
+            return search(state, depth - 1, alpha, beta)
+          }
+          /* --------------------------------------------------- */
+
           if (depth <= 0 || state.ai.hp <= 0 || state.pl.hp <= 0) return evalPosition(state)
 
           if (state.turn === "ai") {
@@ -2597,6 +2626,102 @@
             }
             return v
           }
+        }
+
+        // --- New animation: Lightning Thunderstorm --------------------
+        async function animateThunder(caster, target, ctx, onImpact) {
+          const to = getCharCenter(target.side)
+          const x = to.x
+          const yTop = to.y - 80
+          const bolt = document.createElementNS(SVG_NS, "polyline")
+          bolt.setAttribute(
+            "points",
+            `${x},${yTop} ${x + 8},${yTop + 40} ${x - 8},${yTop + 80} ${x + 6},${yTop + 120} ${x},${to.y}`
+          ) /* all offsets doubled */
+          bolt.setAttribute("stroke", "#fff78e")
+          bolt.setAttribute("stroke-width", "8") /* was 4 */
+          bolt.setAttribute("fill", "none")
+          bolt.setAttribute("stroke-linecap", "round")
+          fxSVG.appendChild(bolt)
+          const len = bolt.getTotalLength()
+          bolt.setAttribute("stroke-dasharray", len)
+          bolt.setAttribute("stroke-dashoffset", len)
+
+          const dur = 160
+          const t0 = performance.now()
+          await new Promise((res) => {
+            function step(t) {
+              const k = clamp((t - t0) / dur, 0, 1)
+              bolt.setAttribute("stroke-dashoffset", String(len * (1 - k)))
+              if (k < 1) requestAnimationFrame(step)
+              else res()
+            }
+            requestAnimationFrame(step)
+          })
+
+          // Impact flash
+          const flash = document.createElementNS(SVG_NS, "circle")
+          flash.setAttribute("cx", String(x))
+          flash.setAttribute("cy", String(to.y))
+          flash.setAttribute("r", "12") /* was 6 */
+          flash.setAttribute("fill", "#fffdc0")
+          fxSVG.appendChild(flash)
+          onImpact()
+
+          const t1 = performance.now()
+          await new Promise((res) => {
+            function fade(t) {
+              const k = clamp((t - t1) / 220, 0, 1)
+              flash.setAttribute("opacity", String(1 - k))
+              if (k < 1) requestAnimationFrame(fade)
+              else res()
+            }
+            requestAnimationFrame(fade)
+          })
+          bolt.remove()
+          flash.remove()
+        }
+
+        // --- New animation: Earthen Chakra Bind -----------------------
+        async function animateBind(caster, target, ctx, onImpact) {
+          const to = getCharCenter(target.side)
+          const g = document.createElementNS(SVG_NS, "g")
+          fxSVG.appendChild(g)
+          const cols = ["#8d744c", "#c2a269"]
+          const rects = []
+          const offs = [-56, -28, 28, 56] /* pillar spacing ×2 (−28, −14, 14, 28) */
+          for (let i = 0; i < offs.length; i++) {
+            const r = document.createElementNS(SVG_NS, "rect")
+            r.setAttribute("x", String(to.x + offs[i] - 6))
+            r.setAttribute("y", String(to.y + 20))
+            r.setAttribute("width", "12") /* was 8 */
+            r.setAttribute("height", "0")
+            r.setAttribute("fill", cols[i % 2])
+            g.appendChild(r)
+            rects.push(r)
+          }
+
+          const dur = 260
+          const t0 = performance.now()
+          let hit = false
+          await new Promise((res) => {
+            function step(t) {
+              const k = clamp((t - t0) / dur, 0, 1)
+              for (const r of rects) {
+                r.setAttribute("y", String(to.y + 20 - 80 * k)) /* 40→80 for taller rise */
+                r.setAttribute("height", String(80 * k)) /* pillar height ×2 */
+              }
+              if (!hit && k >= 0.5) {
+                hit = true
+                onImpact()
+              }
+              if (k < 1) requestAnimationFrame(step)
+              else res()
+            }
+            requestAnimationFrame(step)
+          })
+          await sleep(240)
+          g.remove()
         }
       })()
     </script>
